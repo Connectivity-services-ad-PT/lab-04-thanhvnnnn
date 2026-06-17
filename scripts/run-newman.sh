@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mkdir -p reports
-newman run postman/collections/FIT4110_lab04_notification_docker.postman_collection.json -e postman/environments/FIT4110_lab04_local.postman_environment.json -r cli,junit,htmlextra
+
+ENV_NAME="${1:-local}"
+
+if [[ "$ENV_NAME" == "mock" ]]; then
+  npm run test:mock
+elif [[ "$ENV_NAME" == "local" || "$ENV_NAME" == "docker" ]]; then
+  npm run test:local
+else
+  echo "Usage: bash scripts/run-newman.sh [mock|local|docker]"
+  exit 1
+fi

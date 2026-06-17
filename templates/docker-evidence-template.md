@@ -1,35 +1,63 @@
-# Docker Evidence - Lab 04 Notification
+# Docker Evidence – Lab 04
 
-## 1. Build image
+## Team
 
-- Command:
+- Team name:
+- Service:
+- Image tag:
 
-```bash
-docker build -t fit4110/notification:lab04 .
-```
+## 1. Build evidence
 
-- Screenshot/log: `reports/docker-build.png`
-
-## 2. Run container
+Command:
 
 ```bash
-docker run --rm -p 8000:8000 --env-file .env fit4110/notification:lab04
+docker build -t <image-name>:<tag> .
 ```
 
-- Screenshot: `reports/docker-ps.png`
+Paste log or screenshot here.
 
-## 3. Health check
+## 2. Run evidence
+
+Command:
+
+```bash
+docker run --rm -p 8000:8000 --env-file .env.example <image-name>:<tag>
+```
+
+Paste log or screenshot here.
+
+## 3. Healthcheck evidence
+
+Command:
 
 ```bash
 curl http://localhost:8000/health
 ```
 
-- Screenshot: `reports/health-local.png`
+Result:
 
-## 4. Newman
+```json
+{
+  "status": "ok"
+}
+```
+
+## 4. Newman evidence
+
+Command:
 
 ```bash
 npm run test:local
 ```
 
-- Report: `reports/newman-lab04-local.html`
+Report path:
+
+```text
+reports/newman-lab04-local.html
+reports/newman-lab04-local.xml
+```
+
+## 5. Notes
+
+- Known limitation:
+- Next step for Lab 05:

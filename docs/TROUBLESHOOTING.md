@@ -1,37 +1,13 @@
-# Troubleshooting - Lab 04 Notification
+# TROUBLESHOOTING.md – Lỗi thường gặp Lab 04
 
-## 1. Port 8000 đang bị chiếm
-
-```bash
-docker ps
-```
-
-Dừng container cũ hoặc đổi `APP_PORT` trong `.env`.
-
-## 2. Gọi nghiệp vụ bị 401
-
-Thêm header:
-
-```text
-Authorization: Bearer local-dev-token
-```
-
-## 3. Docker build lỗi package
-
-Chạy lại:
-
-```bash
-docker build --no-cache -t fit4110/notification:lab04 .
-```
-
-## 4. Newman không tìm thấy collection
-
-Kiểm tra file:
-
-```text
-postman/collections/FIT4110_lab04_notification_docker.postman_collection.json
-```
-
-## 5. `/health` chạy nhưng `/notifications` lỗi
-
-Kiểm tra payload có đủ `alert_id`, `target`, `channels`, `priority`, `title`, `message` không.
+| Lỗi | Nguyên nhân | Cách xử lý |
+|---|---|---|
+| `Cannot connect to Docker daemon` | Docker Desktop chưa chạy | Mở Docker Desktop, chờ Docker ready |
+| `port is already allocated` | Port 8000 đang bị service khác dùng | Dừng service cũ hoặc đổi `-p 8001:8000` |
+| `ModuleNotFoundError` | Thiếu dependency hoặc sai `--app-dir` | Kiểm tra `requirements.txt` và lệnh CMD |
+| `/health` không phản hồi | App chưa start hoặc sai port | Xem `docker logs <container>` |
+| Newman `ECONNREFUSED` | Container chưa chạy hoặc baseUrl sai | Kiểm tra environment Postman |
+| Test auth fail | Sai `AUTH_TOKEN` giữa `.env.example` và Postman env | Đồng bộ token |
+| Image quá nặng | Copy thừa `.git`, `.venv`, dataset | Sửa `.dockerignore` |
+| Container chạy bằng root | Dockerfile chưa tạo user | Thêm `USER appuser` |
+| CI fail ở bước Newman | Service chưa ready | Dùng `wait-on` hoặc script wait-for-health |

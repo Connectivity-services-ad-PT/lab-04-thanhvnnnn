@@ -1,10 +1,16 @@
-# Submission Checklist - Lab 04
+# Submission Checklist – Lab 04
 
-- [x] Source code Notification ở `src/notification_app/main.py`.
-- [x] Contract ở `contracts/notification.openapi.yaml`.
-- [x] Dockerfile build được service FastAPI.
-- [x] `.env.example` có token demo, service name, version.
-- [x] Postman collection kiểm thử container.
-- [x] GitHub Actions build Docker và chạy Newman.
-- [ ] Chạy local trên máy cá nhân và lưu evidence trong `reports/`.
-- [ ] Commit/push lên GitHub.
+Nộp các minh chứng sau:
+
+- [ ] `Dockerfile`
+- [ ] `.dockerignore`
+- [ ] `.env.example`
+- [ ] `RUN_LOCAL.md`
+- [ ] Contract OpenAPI đã dùng
+- [ ] Postman Collection đã chạy trên container
+- [ ] Postman Environment local/docker
+- [ ] Newman report XML/HTML
+- [ ] Log hoặc ảnh `docker build`
+- [ ] Log hoặc ảnh `docker run`
+- [ ] Log hoặc ảnh `GET /health`
+- [ ] Link hoặc tên image tag đã push
