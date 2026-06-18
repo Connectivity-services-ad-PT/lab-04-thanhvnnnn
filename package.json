@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Postman/Newman tests for Notify Service",
   "scripts": {
+     "lint:openapi": "npx @stoplight/spectral lint contracts/notify.openapi.yaml",
     "install:newman": "npm install -g newman newman-reporter-html newman-reporter-junit",
     "test:mock": "newman run postman/collections/team_notify.postman_collection.json -e postman/environments/team_notify_mock.postman_environment.json --reporters cli,html,junit --reporter-html-export reports/newman/newman-mock.html --reporter-junit-export reports/newman/newman-mock.xml",
     "test:local": "newman run postman/collections/team_notify.postman_collection.json -e postman/environments/team_notify_local.postman_environment.json --reporters cli,html,junit --reporter-html-export reports/newman/newman-local.html --reporter-junit-export reports/newman/newman-local.xml",
