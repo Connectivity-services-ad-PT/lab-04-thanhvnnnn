@@ -12,7 +12,7 @@
     "test:all": "npm run validate:contract && npm run test:mock && npm run test:local"
   },
   "devDependencies": {
-    "@stoplight/spectral": "^6.11.0",
+   
     "@stoplight/prism-cli": "^5.5.2"
   },
   "keywords": [
