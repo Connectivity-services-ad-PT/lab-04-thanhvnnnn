@@ -1,27 +1,28 @@
 {
-  "name": "fit4110-notify-docker-test",
+  "name": "fit4110-lab04-team-notify-docker",
   "version": "1.0.0",
-  "description": "Postman/Newman tests for Notify Service",
+  "description": "FIT4110 Lab 04 Docker packaging tests for Team Notify",
+  "private": true,
   "scripts": {
-     "lint:openapi": "npx @stoplight/spectral lint contracts/notify.openapi.yaml",
-    "install:newman": "npm install -g newman newman-reporter-html newman-reporter-junit",
-    "test:mock": "newman run postman/collections/team_notify.postman_collection.json -e postman/environments/team_notify_mock.postman_environment.json --reporters cli,html,junit --reporter-html-export reports/newman/newman-mock.html --reporter-junit-export reports/newman/newman-mock.xml",
-    "test:local": "newman run postman/collections/team_notify.postman_collection.json -e postman/environments/team_notify_local.postman_environment.json --reporters cli,html,junit --reporter-html-export reports/newman/newman-local.html --reporter-junit-export reports/newman/newman-local.xml",
-    "test:docker": "echo 'Make sure Docker container is running on port 8000' && npm run test:local",
-    "validate:contract": "npx @stoplight/spectral lint contracts/notify.openapi.yaml",
-    "mock:server": "npx @stoplight/prism mock contracts/notify.openapi.yaml --port 4010",
-    "test:all": "npm run validate:contract && npm run test:mock && npm run test:local"
+    "lint:openapi": "spectral lint --fail-severity error contracts/notify.openapi.yaml",
+    "validate:contract": "npm run lint:openapi",
+    "mock:server": "prism mock contracts/notify.openapi.yaml --host 0.0.0.0 --port 4010",
+    "test:mock": "newman run postman/collections/team_notify.postman_collection.json -e postman/environments/team_notify_mock.postman_environment.json -r cli,htmlextra,junit --reporter-htmlextra-export reports/newman-lab04-mock.html --reporter-junit-export reports/newman-lab04-mock.xml",
+    "test:local": "newman run postman/collections/team_notify.postman_collection.json -e postman/environments/team_notify_local.postman_environment.json -r cli,htmlextra,junit --reporter-htmlextra-export reports/newman-lab04-local.html --reporter-junit-export reports/newman-lab04-local.xml",
+    "test:docker": "npm run test:local"
   },
   "devDependencies": {
-   
-    "@stoplight/prism-cli": "^5.5.2"
+    "@stoplight/prism-cli": "^5.14.2",
+    "@stoplight/spectral-cli": "^6.13.1",
+    "newman": "^6.2.1",
+    "newman-reporter-htmlextra": "^1.23.1",
+    "wait-on": "^8.0.1"
   },
   "keywords": [
-    "postman",
-    "newman",
+    "fit4110",
     "docker",
     "notification-service",
-    "fit4110"
+    "newman"
   ],
   "author": "Team Notify",
   "license": "MIT"

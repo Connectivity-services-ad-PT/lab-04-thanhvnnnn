@@ -1,0 +1,473 @@
+openapi: 3.1.0
+info:
+  title: FIT4110 Lab 04 - Team Notify API
+  version: 0.4.0
+  description: |
+    Contract for the Smart Campus Notification service. Core Business sends
+    alert events and this service queues multi-channel notifications. In Lab 04
+    delivery is mocked so no real email, SMS or push token is committed.
+servers:
+  - url: http://localhost:8000
+    description: Local Docker container
+  - url: http://localhost:4010
+    description: Prism mock server
+tags:
+  - name: system
+  - name: notifications
+  - name: templates
+  - name: upstream-core
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Check service health
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+                    service: notification
+                    version: 0.4.0
+                    dependencies:
+                      queue: mock-ready
+                      sender: mock-ready
+  /notifications:
+    post:
+      tags: [notifications]
+      operationId: createNotification
+      summary: Queue a notification from a Core Business alert
+      parameters:
+        - $ref: "#/components/parameters/TraceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationCreate"
+            examples:
+              critical_motion:
+                value:
+                  alert_id: ALERT-20260617-0001
+                  target:
+                    kind: user
+                    user_id: staff-security-01
+                  channels: [push, sms, email]
+                  priority: critical
+                  title: Motion detected after hours
+                  message: Camera CAM-A01 detected motion in Library Zone B.
+                  dedupe_key: motion:CAM-A01:20260617T210000
+                  template_code: security_motion_v1
+                  metadata:
+                    building: Library
+                    camera_id: CAM-A01
+                    policy_id: POLICY-AFTER-HOURS
+      responses:
+        "202":
+          description: Notification accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationAccepted"
+        "200":
+          description: Duplicate dedupe key was accepted without queueing again
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationAccepted"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: List notification records
+      parameters:
+        - in: query
+          name: recipient_id
+          required: false
+          schema:
+            type: [string, "null"]
+            minLength: 3
+        - in: query
+          name: status
+          required: false
+          schema:
+            $ref: "#/components/schemas/NotificationStatus"
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Notification records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /notifications/{notification_id}:
+    get:
+      tags: [notifications]
+      operationId: getNotification
+      summary: Get notification detail
+      parameters:
+        - $ref: "#/components/parameters/NotificationId"
+      responses:
+        "200":
+          description: Notification detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /notifications/{notification_id}/retry:
+    post:
+      tags: [notifications]
+      operationId: retryNotification
+      summary: Retry a queued or failed notification
+      parameters:
+        - $ref: "#/components/parameters/NotificationId"
+      responses:
+        "202":
+          description: Retry accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetryAccepted"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /templates/{template_code}:
+    get:
+      tags: [templates]
+      operationId: getTemplate
+      summary: Get notification template metadata
+      parameters:
+        - in: path
+          name: template_code
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9_\\-]{3,60}$"
+          example: security_motion_v1
+      responses:
+        "200":
+          description: Template metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /core-alerts/{alert_id}:
+    get:
+      tags: [upstream-core]
+      operationId: getCoreAlertMock
+      summary: Mock Core Business alert for consumer-side smoke testing
+      security: []
+      parameters:
+        - in: path
+          name: alert_id
+          required: true
+          schema:
+            type: string
+            pattern: "^ALERT-[A-Za-z0-9\\-]+$"
+          example: ALERT-20260617-0001
+      responses:
+        "200":
+          description: Mocked Core alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoreAlert"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+  parameters:
+    TraceId:
+      in: header
+      name: X-Trace-Id
+      required: false
+      schema:
+        type: [string, "null"]
+        maxLength: 80
+      example: trace-lab04-notify-001
+    NotificationId:
+      in: path
+      name: notification_id
+      required: true
+      schema:
+        type: string
+        pattern: "^NTF-[0-9]{8}-[0-9]{4}$"
+      example: NTF-20260617-0001
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ValidationError:
+      description: Request validation error
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    NotificationChannel:
+      type: string
+      enum: [email, sms, push, in_app]
+    NotificationPriority:
+      type: string
+      enum: [low, normal, high, critical]
+    NotificationStatus:
+      type: string
+      enum: [queued, sent, failed, duplicate]
+    DeliveryTarget:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [user, email, phone, device]
+        user_id:
+          type: [string, "null"]
+          minLength: 3
+        email:
+          type: [string, "null"]
+          format: email
+        phone:
+          type: [string, "null"]
+          pattern: "^\\+?[0-9]{9,15}$"
+        device_token:
+          type: [string, "null"]
+          minLength: 10
+    NotificationCreate:
+      type: object
+      required: [alert_id, target, channels, priority, title, message]
+      properties:
+        alert_id:
+          type: string
+          pattern: "^ALERT-[A-Za-z0-9\\-]+$"
+        target:
+          $ref: "#/components/schemas/DeliveryTarget"
+        channels:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/NotificationChannel"
+        priority:
+          $ref: "#/components/schemas/NotificationPriority"
+        title:
+          type: string
+          minLength: 3
+          maxLength: 120
+        message:
+          type: string
+          minLength: 5
+          maxLength: 1000
+        dedupe_key:
+          type: [string, "null"]
+          minLength: 8
+          maxLength: 160
+        template_code:
+          type: [string, "null"]
+          pattern: "^[a-z0-9_\\-]{3,60}$"
+        metadata:
+          type: object
+          additionalProperties: true
+    NotificationAccepted:
+      type: object
+      required: [notification_id, alert_id, status, accepted_channels, queued_at]
+      properties:
+        notification_id:
+          type: string
+        alert_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/NotificationStatus"
+        accepted_channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationChannel"
+        dedupe_key:
+          type: [string, "null"]
+        queued_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: [string, "null"]
+    NotificationSummary:
+      type: object
+      required: [notification_id, alert_id, status, channels, priority, created_at]
+      properties:
+        notification_id:
+          type: string
+        alert_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/NotificationStatus"
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationChannel"
+        priority:
+          $ref: "#/components/schemas/NotificationPriority"
+        recipient_id:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+    NotificationList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationSummary"
+    DeliveryAttempt:
+      type: object
+      required: [channel, status, attempted_at]
+      properties:
+        channel:
+          $ref: "#/components/schemas/NotificationChannel"
+        status:
+          $ref: "#/components/schemas/NotificationStatus"
+        attempted_at:
+          type: string
+          format: date-time
+        provider_message_id:
+          type: [string, "null"]
+        error:
+          type: [string, "null"]
+    NotificationDetail:
+      allOf:
+        - $ref: "#/components/schemas/NotificationSummary"
+        - type: object
+          required: [title, message, attempts]
+          properties:
+            title:
+              type: string
+            message:
+              type: string
+            attempts:
+              type: array
+              items:
+                $ref: "#/components/schemas/DeliveryAttempt"
+    RetryAccepted:
+      type: object
+      required: [notification_id, retry_count, status, queued_at]
+      properties:
+        notification_id:
+          type: string
+        retry_count:
+          type: integer
+          minimum: 1
+        status:
+          $ref: "#/components/schemas/NotificationStatus"
+        queued_at:
+          type: string
+          format: date-time
+    TemplateInfo:
+      type: object
+      required: [template_code, channels, locale, subject_template, body_template, active]
+      properties:
+        template_code:
+          type: string
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationChannel"
+        locale:
+          type: string
+        subject_template:
+          type: string
+        body_template:
+          type: string
+        active:
+          type: boolean
+    CoreAlert:
+      type: object
+      required: [alert_id, severity, source_service, policy_id, message, occurred_at]
+      properties:
+        alert_id:
+          type: string
+        severity:
+          $ref: "#/components/schemas/NotificationPriority"
+        source_service:
+          type: string
+          enum: [core-business]
+        policy_id:
+          type: string
+        message:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          example: notification
+        version:
+          type: string
+          example: 0.4.0
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: [string, "null"]

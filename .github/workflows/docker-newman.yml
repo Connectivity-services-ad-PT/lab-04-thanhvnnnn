@@ -1,12 +1,15 @@
-name: Lab04 Docker and Newman Verification
+name: Lab 04 - Team Notify Docker and Newman Verification
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   docker-newman:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -24,33 +27,36 @@ jobs:
         run: npm run lint:openapi
 
       - name: Build Docker image
-        run: docker build -t fit4110/iot-ingestion:lab04 .
+        run: docker build -t fit4110/team-notify:lab04 .
 
       - name: Run Docker container
         run: |
           docker run -d --rm \
-            --name fit4110-iot-lab04 \
+            --name fit4110-notify-lab04 \
             -p 8000:8000 \
             --env-file .env.example \
-            fit4110/iot-ingestion:lab04
+            fit4110/team-notify:lab04
 
       - name: Wait for service health
         run: npx wait-on http://localhost:8000/health --timeout 30000
 
       - name: Run Newman against Docker container
-        run: npm run test:local
+        run: |
+          mkdir -p reports
+          npm run test:local
 
       - name: Show container logs on failure
         if: failure()
-        run: docker logs fit4110-iot-lab04 || true
+        run: docker logs fit4110-notify-lab04 || true
 
       - name: Stop container
         if: always()
-        run: docker stop fit4110-iot-lab04 || true
+        run: docker stop fit4110-notify-lab04 || true
 
       - name: Upload Newman reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lab04-newman-reports
+          name: lab04-team-notify-newman-reports
           path: reports/
+          if-no-files-found: warn

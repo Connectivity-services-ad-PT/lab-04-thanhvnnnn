@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="FIT4110 Lab 04 - Team Notify Docker Tests" tests="11" time="0.068">
+  <testsuite name="01 - Health check" id="ff77aa7d-a7a0-431d-9745-9306e02d4653" timestamp="2026-06-24T18:03:39.743Z" tests="3" failures="0" errors="0" time="0.023">
+    <testcase name="GET /health -> 200" time="0.023" classname="01HealthCheck"/>
+    <testcase name="service is notification" time="0.023" classname="01HealthCheck"/>
+    <testcase name="dependencies are exposed" time="0.023" classname="01HealthCheck"/>
+  </testsuite>
+  <testsuite name="02 - Create notification happy path" id="eb86ef6c-b438-4b8e-b4c8-3418fd806701" timestamp="2026-06-24T18:03:39.743Z" tests="3" failures="0" errors="0" time="0.008">
+    <testcase name="create -> 202" time="0.008" classname="02CreateNotificationHappyPath"/>
+    <testcase name="has notification_id" time="0.008" classname="02CreateNotificationHappyPath"/>
+    <testcase name="trace id is returned" time="0.008" classname="02CreateNotificationHappyPath"/>
+  </testsuite>
+  <testsuite name="03 - Duplicate notification is idempotent" id="750c5b4c-9f64-4692-9eba-56c14abf8a0c" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.006">
+    <testcase name="duplicate -> 200" time="0.006" classname="03DuplicateNotificationIsIdempotent"/>
+    <testcase name="status is duplicate" time="0.006" classname="03DuplicateNotificationIsIdempotent"/>
+  </testsuite>
+  <testsuite name="04 - List notifications" id="d25d3163-af07-44e7-8cd9-b0625f084afb" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="list -> 200" time="0.005" classname="04ListNotifications"/>
+    <testcase name="items array exists" time="0.005" classname="04ListNotifications"/>
+  </testsuite>
+  <testsuite name="05 - Get notification detail" id="8c180d9b-a094-420a-955e-b806d2f386df" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="detail -> 200" time="0.004" classname="05GetNotificationDetail"/>
+    <testcase name="attempts array exists" time="0.004" classname="05GetNotificationDetail"/>
+  </testsuite>
+  <testsuite name="06 - Retry notification" id="277df73d-cc03-4897-94de-5e1a783fa5a7" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="retry -> 202" time="0.004" classname="06RetryNotification"/>
+    <testcase name="retry count exists" time="0.004" classname="06RetryNotification"/>
+  </testsuite>
+  <testsuite name="07 - Get template" id="55695604-a769-44a2-a4ed-d15d8f0a75f8" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.003">
+    <testcase name="template -> 200" time="0.003" classname="07GetTemplate"/>
+    <testcase name="template_code returned" time="0.003" classname="07GetTemplate"/>
+  </testsuite>
+  <testsuite name="08 - Missing auth should be rejected" id="60e6340a-14d6-4133-aace-9aaba2a99441" timestamp="2026-06-24T18:03:39.743Z" tests="3" failures="0" errors="0" time="0.004">
+    <testcase name="missing auth -> 401" time="0.004" classname="08MissingAuthShouldBeRejected"/>
+    <testcase name="problem details body" time="0.004" classname="08MissingAuthShouldBeRejected"/>
+    <testcase name="problem content type" time="0.004" classname="08MissingAuthShouldBeRejected"/>
+  </testsuite>
+  <testsuite name="09 - Invalid payload should fail validation" id="b182bfcd-1547-4536-a327-43adc9a15517" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="invalid payload -> 422" time="0.004" classname="09InvalidPayloadShouldFailValidation"/>
+    <testcase name="problem details body" time="0.004" classname="09InvalidPayloadShouldFailValidation"/>
+  </testsuite>
+  <testsuite name="10 - Boundary: max length message is accepted" id="b568c959-f4a3-45b2-8813-1ddd689d9b1b" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="max length message -> 202" time="0.004" classname="10BoundaryMaxLengthMessageIsAccepted"/>
+    <testcase name="queued status returned" time="0.004" classname="10BoundaryMaxLengthMessageIsAccepted"/>
+  </testsuite>
+  <testsuite name="11 - Consumer-side Core alert mock" id="d05749e8-e2df-4b26-9447-2a0fd5327799" timestamp="2026-06-24T18:03:39.743Z" tests="2" failures="0" errors="0" time="0.003">
+    <testcase name="core alert mock -> 200" time="0.003" classname="11ConsumerSideCoreAlertMock"/>
+    <testcase name="alert id exists" time="0.003" classname="11ConsumerSideCoreAlertMock"/>
+  </testsuite>
+</testsuites>

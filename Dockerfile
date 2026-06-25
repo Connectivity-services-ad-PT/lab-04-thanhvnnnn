@@ -1,33 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
 FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV SERVICE_NAME=notification
+ENV SERVICE_VERSION=0.4.0
+ENV APP_HOST=0.0.0.0
+ENV APP_PORT=8000
 
 WORKDIR /app
 
-# Tạo non-root user
-RUN addgroup --system appgroup && \
-    adduser --system --no-create-home --ingroup appgroup appuser
+RUN addgroup --system appgroup \
+    && adduser --system --no-create-home --ingroup appgroup appuser
 
-# Copy requirements và cài đặt
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
 COPY src/ ./src/
-
-# Copy environment example
 COPY .env.example .env
 
-# Chown cho non-root user
 RUN chown -R appuser:appgroup /app
-
-# Switch sang non-root user
 USER appuser
 
-# Expose port
 EXPOSE 8000
 
-# Health check using Python (no curl needed)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" || exit 1
 
-# Run
-CMD ["uvicorn", "notify_app.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "src"]
+CMD ["sh", "-c", "uvicorn notify_app.main:app --app-dir src --host ${APP_HOST} --port ${APP_PORT}"]

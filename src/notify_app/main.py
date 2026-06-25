@@ -1,190 +1,391 @@
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
-from typing import Optional
-from datetime import datetime
 import os
-import logging
-import uuid
-from dotenv import load_dotenv
+from datetime import datetime, timezone
+from enum import Enum
+from http import HTTPStatus
+from typing import Dict, List, Optional
 
-# Load environment variables
-load_dotenv()
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+SERVICE_NAME = os.getenv("SERVICE_NAME", "notification")
+SERVICE_VERSION = os.getenv("SERVICE_VERSION", "0.4.0")
+AUTH_TOKEN = os.getenv("AUTH_TOKEN", "local-dev-token")
 
-# Create FastAPI app
 app = FastAPI(
-    title="Notify Service - Smart Campus",
-    description="Notification service for Smart Campus Operations Platform",
-    version="1.0.0"
+    title="FIT4110 Lab 04 - Notification Service",
+    version=SERVICE_VERSION,
+    description="Docker-packaged Notification service for Smart Campus alerts.",
 )
 
-# ==================== MODELS ====================
 
-class NotificationRequest(BaseModel):
-    """Request model for sending notification"""
-    
-    type: str = Field(..., description="Type: email, sms, webhook, inapp")
-    recipient: str = Field(..., description="Recipient address")
-    subject: Optional[str] = Field(None, description="Subject for email")
-    message: str = Field(..., description="Notification content")
-    timestamp: datetime = Field(..., description="ISO 8601 timestamp")
-    
-    @validator('type')
-    def validate_type(cls, v):
-        allowed = ["email", "sms", "webhook", "inapp"]
-        if v not in allowed:
-            raise ValueError(f'type must be one of: {", ".join(allowed)}')
-        return v
-    
-    @validator('recipient')
-    def validate_recipient(cls, v, values):
-        notification_type = values.get('type')
-        
-        if notification_type == 'email':
-            if '@' not in v or '.' not in v:
-                raise ValueError('Invalid email format')
-        elif notification_type == 'sms':
-            # Basic phone validation
-            if not v.replace('+', '').replace('-', '').isdigit():
-                raise ValueError('Invalid phone number')
-        elif notification_type == 'webhook':
-            if not v.startswith(('http://', 'https://')):
-                raise ValueError('Webhook must start with http:// or https://')
-        
-        return v
-    
-    @validator('subject')
-    def validate_subject(cls, v, values):
-        if values.get('type') == 'email' and not v:
-            raise ValueError('Subject is required for email')
-        return v
+class NotificationChannel(str, Enum):
+    email = "email"
+    sms = "sms"
+    push = "push"
+    in_app = "in_app"
 
-class NotificationResponse(BaseModel):
-    success: bool
-    notification_id: str
-    message: str
-    timestamp: datetime
+
+class NotificationPriority(str, Enum):
+    low = "low"
+    normal = "normal"
+    high = "high"
+    critical = "critical"
+
+
+class NotificationStatus(str, Enum):
+    queued = "queued"
+    sent = "sent"
+    failed = "failed"
+    duplicate = "duplicate"
+
 
 class ProblemDetails(BaseModel):
-    type: str
+    type: str = "about:blank"
     title: str
-    status: int
+    status: int = Field(..., ge=400, le=599)
     detail: str
-    instance: str
+    instance: Optional[str] = None
 
-# ==================== MOCK SERVICE ====================
 
-def send_mock_notification(request: NotificationRequest):
-    """Mock sending notification - no real delivery"""
-    notification_id = str(uuid.uuid4())
-    
-    # Log to console
-    print("\n" + "="*60)
-    print(f"[MOCK] Sending {request.type} notification")
-    print(f"To: {request.recipient}")
-    if request.subject:
-        print(f"Subject: {request.subject}")
-    print(f"Message: {request.message}")
-    print(f"Timestamp: {request.timestamp}")
-    print(f"Notification ID: {notification_id}")
-    print("="*60 + "\n")
-    
-    logger.info(f"Mock notification sent: {notification_id} to {request.recipient}")
-    
-    return {
-        "id": notification_id,
-        "status": "accepted",
-        "sent_at": datetime.now().isoformat()
-    }
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    version: str
+    dependencies: Dict[str, str] = Field(default_factory=dict)
 
-# ==================== ENDPOINTS ====================
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "service": "notify-service",
-        "timestamp": datetime.now().isoformat()
-    }
+class DeliveryTarget(BaseModel):
+    kind: str = Field(..., examples=["user"])
+    user_id: Optional[str] = Field(default=None, examples=["staff-security-01"])
+    email: Optional[str] = Field(default=None, examples=["security@example.edu.vn"])
+    phone: Optional[str] = Field(default=None, examples=["+84901234567"])
+    device_token: Optional[str] = Field(default=None, examples=["fcm-token-demo-001"])
 
-@app.post("/notifications", status_code=202)
-async def send_notification(request: NotificationRequest):
-    """Send a notification through specified channel"""
-    try:
-        logger.info(f"Received notification request: type={request.type}, recipient={request.recipient}")
-        
-        # Send mock notification
-        result = send_mock_notification(request)
-        
-        return NotificationResponse(
-            success=True,
-            notification_id=result["id"],
-            message=f"Notification accepted for delivery via {request.type}",
-            timestamp=datetime.now()
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to send notification: {str(e)}")
-        
-        problem = ProblemDetails(
-            type="/errors/notification-failed",
-            title="Notification Failed",
-            status=500,
-            detail=str(e),
-            instance="/notifications"
-        )
-        
-        raise HTTPException(
-            status_code=500,
-            detail=problem.dict()
-        )
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.kind == "user" and not self.user_id:
+            raise ValueError("target.user_id is required when kind=user")
+        if self.kind == "email" and not self.email:
+            raise ValueError("target.email is required when kind=email")
+        if self.kind == "phone" and not self.phone:
+            raise ValueError("target.phone is required when kind=phone")
+        if self.kind == "device" and not self.device_token:
+            raise ValueError("target.device_token is required when kind=device")
+        if self.kind not in {"user", "email", "phone", "device"}:
+            raise ValueError("target.kind must be one of user, email, phone, device")
+        return self
 
-# ==================== ERROR HANDLERS ====================
+
+class NotificationCreate(BaseModel):
+    alert_id: str = Field(..., pattern=r"^ALERT-[A-Za-z0-9\-]+$", examples=["ALERT-20260617-0001"])
+    target: DeliveryTarget
+    channels: List[NotificationChannel] = Field(..., min_length=1, examples=[["push", "sms", "email"]])
+    priority: NotificationPriority = Field(..., examples=["critical"])
+    title: str = Field(..., min_length=3, max_length=120)
+    message: str = Field(..., min_length=5, max_length=1000)
+    dedupe_key: Optional[str] = Field(default=None, min_length=8, max_length=160)
+    template_code: Optional[str] = Field(default=None, pattern=r"^[a-z0-9_\-]{3,60}$")
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+    @field_validator("channels")
+    @classmethod
+    def unique_channels(cls, channels: List[NotificationChannel]):
+        if len(set(channels)) != len(channels):
+            raise ValueError("channels must be unique")
+        return channels
+
+
+class NotificationAccepted(BaseModel):
+    notification_id: str
+    alert_id: str
+    status: NotificationStatus
+    accepted_channels: List[NotificationChannel]
+    dedupe_key: Optional[str] = None
+    queued_at: str
+    trace_id: Optional[str] = None
+
+
+class RetryAccepted(BaseModel):
+    notification_id: str
+    retry_count: int
+    status: NotificationStatus
+    queued_at: str
+
+
+NOTIFICATIONS: Dict[str, Dict[str, object]] = {}
+DEDUPE_INDEX: Dict[str, str] = {}
+RETRY_COUNT: Dict[str, int] = {}
+TEMPLATES: Dict[str, Dict[str, object]] = {
+    "security_motion_v1": {
+        "template_code": "security_motion_v1",
+        "channels": ["push", "sms", "email"],
+        "locale": "vi-VN",
+        "subject_template": "[Smart Campus] {{title}}",
+        "body_template": "{{message}}",
+        "active": True,
+    },
+    "sensor_high_temperature_v1": {
+        "template_code": "sensor_high_temperature_v1",
+        "channels": ["email", "push"],
+        "locale": "vi-VN",
+        "subject_template": "[Smart Campus] Sensor alert",
+        "body_template": "{{message}}",
+        "active": True,
+    },
+}
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def next_notification_id() -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return f"NTF-{today}-{len(NOTIFICATIONS) + 1:04d}"
+
+
+def recipient_id(target: DeliveryTarget) -> Optional[str]:
+    return target.user_id or target.email or target.phone or target.device_token
+
+
+def build_problem(
+    status_code: int,
+    title: str,
+    detail: str,
+    instance: Optional[str] = None,
+    problem_type: str = "about:blank",
+) -> Dict[str, object]:
+    data: Dict[str, object] = {"type": problem_type, "title": title, "status": status_code, "detail": detail}
+    if instance:
+        data["instance"] = instance
+    return data
+
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    """Handle HTTP exceptions with ProblemDetails format"""
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    if isinstance(exc.detail, dict):
+        problem = exc.detail
+    else:
+        try:
+            title = HTTPStatus(exc.status_code).phrase
+        except ValueError:
+            title = "HTTP Error"
+        problem = build_problem(exc.status_code, title, str(exc.detail), str(request.url.path))
+    problem.setdefault("instance", str(request.url.path))
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "type": "/errors/http-error",
-            "title": "HTTP Error",
-            "status": exc.status_code,
-            "detail": str(exc.detail),
-            "instance": request.url.path
-        }
+        content=problem,
+        media_type="application/problem+json",
+        headers=getattr(exc, "headers", None),
     )
 
-@app.exception_handler(ValueError)
-async def value_error_handler(request, exc):
-    """Handle validation errors"""
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(item) for item in first_error.get("loc", []))
+    message = first_error.get("msg", "Request validation error")
+    detail = f"{location}: {message}" if location else message
     return JSONResponse(
-        status_code=400,
-        content={
-            "type": "/errors/validation-error",
-            "title": "Validation Error",
-            "status": 400,
-            "detail": str(exc),
-            "instance": request.url.path
-        }
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=build_problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Validation error",
+            detail,
+            str(request.url.path),
+            "https://smart-campus.local/problems/validation-error",
+        ),
+        media_type="application/problem+json",
     )
 
-# ==================== RUN SERVER ====================
+
+def verify_bearer_token(authorization: Optional[str] = Header(default=None)) -> None:
+    expected = f"Bearer {AUTH_TOKEN}"
+    if authorization != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=build_problem(
+                status.HTTP_401_UNAUTHORIZED,
+                "Unauthorized",
+                "Missing or invalid bearer token",
+                problem_type="https://smart-campus.local/problems/unauthorized",
+            ),
+        )
+
+
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(
+        status="ok",
+        service=SERVICE_NAME,
+        version=SERVICE_VERSION,
+        dependencies={"queue": "mock-ready", "sender": "mock-ready"},
+    )
+
+
+@app.head("/health", include_in_schema=False)
+def health_head() -> Response:
+    return Response(status_code=status.HTTP_200_OK)
+
+
+@app.post(
+    "/notifications",
+    response_model=NotificationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_bearer_token)],
+    responses={401: {"model": ProblemDetails}, 422: {"model": ProblemDetails}},
+)
+def create_notification(
+    payload: NotificationCreate,
+    response: Response,
+    x_trace_id: Optional[str] = Header(default=None, alias="X-Trace-Id"),
+) -> NotificationAccepted:
+    if payload.dedupe_key and payload.dedupe_key in DEDUPE_INDEX:
+        notification_id = DEDUPE_INDEX[payload.dedupe_key]
+        item = NOTIFICATIONS[notification_id]
+        response.status_code = status.HTTP_200_OK
+        return NotificationAccepted(
+            notification_id=notification_id,
+            alert_id=str(item["alert_id"]),
+            status=NotificationStatus.duplicate,
+            accepted_channels=item["channels"],
+            dedupe_key=item.get("dedupe_key"),
+            queued_at=str(item["created_at"]),
+            trace_id=x_trace_id,
+        )
+
+    notification_id = next_notification_id()
+    created_at = now_iso()
+    channels = [channel.value for channel in payload.channels]
+    item = {
+        "notification_id": notification_id,
+        "alert_id": payload.alert_id,
+        "status": NotificationStatus.queued.value,
+        "channels": channels,
+        "priority": payload.priority.value,
+        "recipient_id": recipient_id(payload.target),
+        "target": payload.target.model_dump(exclude_none=True),
+        "title": payload.title,
+        "message": payload.message,
+        "dedupe_key": payload.dedupe_key,
+        "template_code": payload.template_code,
+        "metadata": payload.metadata,
+        "created_at": created_at,
+        "attempts": [
+            {
+                "channel": channel,
+                "status": "queued",
+                "attempted_at": created_at,
+                "provider_message_id": None,
+                "error": None,
+            }
+            for channel in channels
+        ],
+    }
+    NOTIFICATIONS[notification_id] = item
+    if payload.dedupe_key:
+        DEDUPE_INDEX[payload.dedupe_key] = notification_id
+
+    return NotificationAccepted(
+        notification_id=notification_id,
+        alert_id=payload.alert_id,
+        status=NotificationStatus.queued,
+        accepted_channels=payload.channels,
+        dedupe_key=payload.dedupe_key,
+        queued_at=created_at,
+        trace_id=x_trace_id,
+    )
+
+
+@app.get("/notifications", dependencies=[Depends(verify_bearer_token)])
+def list_notifications(
+    recipient_id: Optional[str] = Query(default=None, min_length=3),
+    status_filter: Optional[NotificationStatus] = Query(default=None, alias="status"),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> Dict[str, List[Dict[str, object]]]:
+    items = list(NOTIFICATIONS.values())
+    if recipient_id:
+        items = [item for item in items if item.get("recipient_id") == recipient_id]
+    if status_filter:
+        items = [item for item in items if item.get("status") == status_filter.value]
+    summaries = [
+        {
+            "notification_id": item["notification_id"],
+            "alert_id": item["alert_id"],
+            "status": item["status"],
+            "channels": item["channels"],
+            "priority": item["priority"],
+            "recipient_id": item.get("recipient_id"),
+            "created_at": item["created_at"],
+        }
+        for item in items[-limit:]
+    ]
+    return {"items": summaries}
+
+
+@app.get("/notifications/{notification_id}", dependencies=[Depends(verify_bearer_token)])
+def get_notification(notification_id: str) -> Dict[str, object]:
+    if notification_id not in NOTIFICATIONS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=build_problem(
+                status.HTTP_404_NOT_FOUND,
+                "Not found",
+                f"Notification {notification_id} does not exist",
+                problem_type="https://smart-campus.local/problems/not-found",
+            ),
+        )
+    return NOTIFICATIONS[notification_id]
+
+
+@app.post(
+    "/notifications/{notification_id}/retry",
+    response_model=RetryAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_bearer_token)],
+)
+def retry_notification(notification_id: str) -> RetryAccepted:
+    if notification_id not in NOTIFICATIONS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=build_problem(status.HTTP_404_NOT_FOUND, "Not found", f"Notification {notification_id} does not exist"),
+        )
+    item = NOTIFICATIONS[notification_id]
+    retry_count = RETRY_COUNT.get(notification_id, 0) + 1
+    RETRY_COUNT[notification_id] = retry_count
+    item["status"] = NotificationStatus.queued.value
+    queued_at = now_iso()
+    item["attempts"].append(
+        {"channel": "in_app", "status": "queued", "attempted_at": queued_at, "provider_message_id": None, "error": None}
+    )
+    return RetryAccepted(notification_id=notification_id, retry_count=retry_count, status=NotificationStatus.queued, queued_at=queued_at)
+
+
+@app.get("/templates/{template_code}", dependencies=[Depends(verify_bearer_token)])
+def get_template(template_code: str) -> Dict[str, object]:
+    if template_code not in TEMPLATES:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=build_problem(status.HTTP_404_NOT_FOUND, "Not found", f"Template {template_code} does not exist"),
+        )
+    return TEMPLATES[template_code]
+
+
+@app.get("/core-alerts/{alert_id}")
+def get_core_alert_mock(alert_id: str) -> Dict[str, str]:
+    return {
+        "alert_id": alert_id,
+        "severity": "critical",
+        "source_service": "core-business",
+        "policy_id": "POLICY-AFTER-HOURS",
+        "message": "Motion detected after hours",
+        "occurred_at": "2026-06-17T21:00:00+07:00",
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True
-    )
+
+    uvicorn.run(app, host=os.getenv("APP_HOST", "0.0.0.0"), port=int(os.getenv("APP_PORT", "8000")))
